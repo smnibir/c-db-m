@@ -8,6 +8,65 @@
 
 if (!defined('ABSPATH')) exit;
 
+// Lightweight caching helpers (transients with sane defaults)
+if (!function_exists('wg_cache_get')) {
+    /**
+     * Retrieve a cached value by transient key.
+     */
+    function wg_cache_get(string $key)
+    {
+        return get_transient($key);
+    }
+}
+
+if (!function_exists('wg_cache_set')) {
+    /**
+     * Store a value in the transient cache with a configurable TTL.
+     */
+    function wg_cache_set(string $key, $value, int $ttlSeconds)
+    {
+        // Ensure non-negative TTL
+        $ttl = max(0, (int) $ttlSeconds);
+        set_transient($key, $value, $ttl);
+        return $value;
+    }
+}
+
+if (!function_exists('wg_cache_delete')) {
+    /**
+     * Delete a cached transient by key.
+     */
+    function wg_cache_delete(string $key)
+    {
+        delete_transient($key);
+    }
+}
+
+if (!function_exists('wg_cache_ttl')) {
+    /**
+     * Allow filtering TTLs per cache type with sensible defaults.
+     * Example filters: 'wg_cache_ttl_clickup_pages', 'wg_cache_ttl_clickup_tasks', 'wg_cache_ttl_whatconverts_leads'
+     */
+    function wg_cache_ttl(string $type, int $defaultSeconds)
+    {
+        return (int) apply_filters('wg_cache_ttl_' . $type, $defaultSeconds);
+    }
+}
+
+if (!function_exists('wg_user_cache_key')) {
+    /**
+     * Build a per-user cache key with stable hashing of parts.
+     */
+    function wg_user_cache_key(string $prefix, array $parts = [])
+    {
+        $userId = get_current_user_id();
+        $saltParts = array_map('strval', $parts);
+        array_unshift($saltParts, (string) $userId);
+        $hash = md5(implode('|', $saltParts));
+        return $prefix . '_' . $hash;
+    }
+}
+
 // Load all modules
 require_once plugin_dir_path(__FILE__) . 'includes/settings.php';
 require_once plugin_dir_path(__FILE__) . 'includes/acf-space-field.php';
@@ -18,8 +77,6 @@ require_once plugin_dir_path(__FILE__) . 'includes/parsedown.php';
 require_once plugin_dir_path(__FILE__) . 'includes/billing-ajax-handlers.php';
 require_once plugin_dir_path(__FILE__) . 'includes/api-endpoints.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-gf-clickup.php';
-// Add this line to make sure the file loads
-require_once __DIR__ . '/includes/class-gf-clickup.php';
 
 // OR if it's in functions.php:
 

@@ -112,29 +112,44 @@ function fetch_whatconverts_leads() {
     if ($lead_type) $params['lead_type'] = $lead_type;
     
     $url = 'https://app.whatconverts.com/api/v1/leads?' . http_build_query($params);
-    
-    error_log('WhatConverts API URL: ' . $url);
-    
-    $response = wp_remote_get($url, [
-        'headers' => [
-            'Authorization' => 'Basic ' . base64_encode($api_token . ':' . $api_secret),
-            'Content-Type' => 'application/json'
-        ],
-        'timeout' => 30
-    ]);
-    
-    if (is_wp_error($response)) {
-        error_log('WhatConverts leads API error: ' . $response->get_error_message());
-        wp_send_json_error('Failed to fetch leads: ' . $response->get_error_message(), 500);
+
+    // Cache per user, page and filters
+    $cache_key = function_exists('wg_user_cache_key')
+        ? wg_user_cache_key('wg_wc_leads', [$account_id, $page, $date_range, $status, $source, $lead_type, $start_date, $end_date])
+        : 'wg_wc_leads_' . md5(implode('|', [$account_id, $page, $date_range, $status, $source, $lead_type, $start_date, $end_date, get_current_user_id()]));
+
+    $body = function_exists('wg_cache_get') ? wg_cache_get($cache_key) : false;
+
+    if ($body === false) {
+        error_log('WhatConverts API URL: ' . $url);
+        $response = wp_remote_get($url, [
+            'headers' => [
+                'Authorization' => 'Basic ' . base64_encode($api_token . ':' . $api_secret),
+                'Content-Type' => 'application/json'
+            ],
+            'timeout' => 30
+        ]);
+        
+        if (is_wp_error($response)) {
+            error_log('WhatConverts leads API error: ' . $response->get_error_message());
+            wp_send_json_error('Failed to fetch leads: ' . $response->get_error_message(), 500);
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        
+        if ($response_code !== 200) {
+            $decoded_error = json_decode($body, true);
+            error_log('WhatConverts API error response: ' . print_r($decoded_error, true));
+            wp_send_json_error('API error: ' . ($decoded_error['message'] ?? 'Unknown error'), $response_code);
+        }
+        
+        $ttl = function_exists('wg_cache_ttl') ? wg_cache_ttl('whatconverts_leads', 120) : 120; // 2 minutes
+        if (function_exists('wg_cache_set')) {
+            wg_cache_set($cache_key, $body, $ttl);
+        }
     }
-    
-    $response_code = wp_remote_retrieve_response_code($response);
-    $body = json_decode(wp_remote_retrieve_body($response), true);
-    
-    if ($response_code !== 200) {
-        error_log('WhatConverts API error response: ' . print_r($body, true));
-        wp_send_json_error('API error: ' . ($body['message'] ?? 'Unknown error'), $response_code);
-    }
+    $body = json_decode($body, true);
     
     // Collect unique values for filters
     $all_sources = [];
@@ -230,23 +245,32 @@ function fetch_lead_details() {
     $successful_url = '';
     
     foreach ($urls_to_try as $url) {
+        $cache_key = function_exists('wg_user_cache_key')
+            ? wg_user_cache_key('wg_wc_lead_details', [$account_id, $lead_id, $url])
+            : 'wg_wc_lead_details_' . md5($account_id . '|' . $lead_id . '|' . $url . '|' . get_current_user_id());
+
+        $cached_body = function_exists('wg_cache_get') ? wg_cache_get($cache_key) : false;
         error_log('Trying URL: ' . $url);
         
-        $response = wp_remote_get($url, [
-            'headers' => [
-                'Authorization' => 'Basic ' . base64_encode($api_token . ':' . $api_secret),
-                'Content-Type' => 'application/json'
-            ],
-            'timeout' => 30
-        ]);
+        if ($cached_body === false) {
+            $response = wp_remote_get($url, [
+                'headers' => [
+                    'Authorization' => 'Basic ' . base64_encode($api_token . ':' . $api_secret),
+                    'Content-Type' => 'application/json'
+                ],
+                'timeout' => 30
+            ]);
+        } else {
+            $response = null;
+        }
         
-        if (is_wp_error($response)) {
+        if ($response && is_wp_error($response)) {
             error_log('API Error for URL ' . $url . ': ' . $response->get_error_message());
             continue;
         }
         
-        $response_code = wp_remote_retrieve_response_code($response);
-        $body = wp_remote_retrieve_body($response);
+        $response_code = $response ? wp_remote_retrieve_response_code($response) : 200;
+        $body = $response ? wp_remote_retrieve_body($response) : $cached_body;
         
         error_log('Response Code for ' . $url . ': ' . $response_code);
         
@@ -257,6 +281,10 @@ function fetch_lead_details() {
                 $successful_url = $url;
                 error_log('SUCCESS with URL: ' . $url);
                 error_log('Raw API Response (first 2000 chars): ' . substr($body, 0, 2000));
+                if ($cached_body === false && function_exists('wg_cache_set')) {
+                    $ttl = function_exists('wg_cache_ttl') ? wg_cache_ttl('whatconverts_lead_details', 300) : 300;
+                    wg_cache_set($cache_key, $body, $ttl);
+                }
                 break;
             }
         }
