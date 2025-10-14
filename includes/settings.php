@@ -49,6 +49,62 @@ add_action('admin_menu', function () {
                     </table>
                     <?php submit_button(); ?>
                 </form>
+
+                <hr style="margin: 40px 0;">
+
+                <h2>Performance & Cache Management</h2>
+                <div style="background: #fff; border: 1px solid #ccd0d4; padding: 20px; border-radius: 4px;">
+                    <p><strong>Cache Status:</strong> ClickUp API responses are cached to improve performance.</p>
+                    <p class="description">
+                        • Tasks are cached for 5 minutes<br>
+                        • Meeting notes and performance data are cached for 30 minutes<br>
+                        • Campaign strategy and brand assets are cached for 1 hour
+                    </p>
+                    
+                    <div style="margin-top: 20px;">
+                        <button type="button" id="clear-all-cache" class="button button-secondary">
+                            🗑️ Clear All Cache
+                        </button>
+                        <span id="cache-clear-result" style="margin-left: 10px; display: none;"></span>
+                    </div>
+                </div>
+
+                <script>
+                jQuery(document).ready(function($) {
+                    $('#clear-all-cache').on('click', function() {
+                        var $button = $(this);
+                        var $result = $('#cache-clear-result');
+                        
+                        $button.prop('disabled', true).text('Clearing...');
+                        $result.hide();
+                        
+                        $.ajax({
+                            url: ajaxurl,
+                            type: 'POST',
+                            data: {
+                                action: 'clear_clickup_cache',
+                                nonce: '<?php echo wp_create_nonce('clickup_cache_nonce'); ?>',
+                                type: 'all'
+                            },
+                            success: function(response) {
+                                $button.prop('disabled', false).text('🗑️ Clear All Cache');
+                                if (response.success) {
+                                    $result.css('color', '#46b450').text('✓ ' + response.data.message).fadeIn();
+                                } else {
+                                    $result.css('color', '#dc3232').text('✗ ' + response.data.message).fadeIn();
+                                }
+                                setTimeout(function() {
+                                    $result.fadeOut();
+                                }, 3000);
+                            },
+                            error: function() {
+                                $button.prop('disabled', false).text('🗑️ Clear All Cache');
+                                $result.css('color', '#dc3232').text('✗ Error clearing cache').fadeIn();
+                            }
+                        });
+                    });
+                });
+                </script>
             </div>
             <?php
         }
