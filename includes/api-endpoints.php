@@ -166,29 +166,41 @@ function webgrowth_api_get_tasks($request) {
     if (!$api_key || !$folder_id) {
         return new WP_Error('missing_config', 'Missing ClickUp configuration', ['status' => 400]);
     }
+    // Cache per user/folder
+    $cache_key = function_exists('wg_user_cache_key')
+        ? wg_user_cache_key('wg_clickup_tasks_rest', [$folder_id])
+        : 'wg_clickup_tasks_rest_' . md5($folder_id . '|' . $user_id);
 
-    $all_tasks = [];
-    $list_ids = [];
+    $all_tasks = function_exists('wg_cache_get') ? wg_cache_get($cache_key) : false;
+    if ($all_tasks === false) {
+        $all_tasks = [];
+        $list_ids = [];
 
-    // Get Lists in Folder
-    $res_lists = wp_remote_get("https://api.clickup.com/api/v2/folder/{$folder_id}/list", [
-        'headers' => ['Authorization' => $api_key]
-    ]);
-
-    $lists = json_decode(wp_remote_retrieve_body($res_lists), true)['lists'] ?? [];
-
-    foreach ($lists as $list) {
-        $list_ids[] = $list['id'];
-    }
-
-    // Get tasks from each list
-    foreach ($list_ids as $list_id) {
-        $response = wp_remote_get("https://api.clickup.com/api/v2/list/{$list_id}/task?subtasks=true&include_closed=true", [
+        // Get Lists in Folder
+        $res_lists = wp_remote_get("https://api.clickup.com/api/v2/folder/{$folder_id}/list", [
             'headers' => ['Authorization' => $api_key]
         ]);
 
-        $tasks = json_decode(wp_remote_retrieve_body($response), true)['tasks'] ?? [];
-        $all_tasks = array_merge($all_tasks, $tasks);
+        $lists = json_decode(wp_remote_retrieve_body($res_lists), true)['lists'] ?? [];
+
+        foreach ($lists as $list) {
+            $list_ids[] = $list['id'];
+        }
+
+        // Get tasks from each list
+        foreach ($list_ids as $list_id) {
+            $response = wp_remote_get("https://api.clickup.com/api/v2/list/{$list_id}/task?subtasks=true&include_closed=true", [
+                'headers' => ['Authorization' => $api_key]
+            ]);
+
+            $tasks = json_decode(wp_remote_retrieve_body($response), true)['tasks'] ?? [];
+            $all_tasks = array_merge($all_tasks, $tasks);
+        }
+
+        $ttl = function_exists('wg_cache_ttl') ? wg_cache_ttl('clickup_tasks', 180) : 180;
+        if (function_exists('wg_cache_set')) {
+            wg_cache_set($cache_key, $all_tasks, $ttl);
+        }
     }
 
     // Format tasks for mobile app

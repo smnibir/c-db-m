@@ -35,21 +35,34 @@ function render_clickup_client_dashboard() {
         return '<p>Click Here to login</p>';
     }
 
-    // --- ClickUp API: Fetch pages under Client Portal doc --------------------
-    $endpoint = "https://api.clickup.com/api/v3/workspaces/{$workspace_id}/docs/{$doc_id}/pages";
-    $response = wp_remote_get($endpoint, [
-        'headers' => [
-            'Authorization' => $api_key,
-        ],
-        'timeout' => 20,
-    ]);
+    // --- ClickUp API: Fetch pages with caching -------------------------------
+    $cache_key = function_exists('wg_user_cache_key')
+        ? wg_user_cache_key('wg_clickup_pages', [$workspace_id, $doc_id])
+        : 'wg_clickup_pages_' . md5($workspace_id . '|' . $doc_id . '|' . get_current_user_id());
 
-    if (is_wp_error($response)) {
-        return '<p>Error fetching ClickUp pages.</p>';
+    $pages = function_exists('wg_cache_get') ? wg_cache_get($cache_key) : false;
+
+    if ($pages === false) {
+        $endpoint = "https://api.clickup.com/api/v3/workspaces/{$workspace_id}/docs/{$doc_id}/pages";
+        $response = wp_remote_get($endpoint, [
+            'headers' => [
+                'Authorization' => $api_key,
+            ],
+            'timeout' => 20,
+        ]);
+
+        if (is_wp_error($response)) {
+            return '<p>Error fetching ClickUp pages.</p>';
+        }
+
+        $body  = wp_remote_retrieve_body($response);
+        $pages = json_decode($body, true);
+
+        $ttl = function_exists('wg_cache_ttl') ? wg_cache_ttl('clickup_pages', 300) : 300; // 5 minutes
+        if (function_exists('wg_cache_set')) {
+            wg_cache_set($cache_key, $pages, $ttl);
+        }
     }
-
-    $body  = wp_remote_retrieve_body($response);
-    $pages = json_decode($body, true);
 
     // Normalize shape: API sometimes returns { "pages": [...] }
     if (is_array($pages) && isset($pages['pages']) && is_array($pages['pages'])) {

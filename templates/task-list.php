@@ -43,7 +43,19 @@ function get_clickup_tasks_from_folder($api_key, $folder_id) {
     return $all_tasks;
 }
 
-$tasks = get_clickup_tasks_from_folder($api_key, $folder_id);
+// Cache-heavy ClickUp tasks per user/folder
+$cache_key = function_exists('wg_user_cache_key')
+    ? wg_user_cache_key('wg_clickup_tasks', [$folder_id])
+    : 'wg_clickup_tasks_' . md5($folder_id . '|' . get_current_user_id());
+
+$tasks = function_exists('wg_cache_get') ? wg_cache_get($cache_key) : false;
+if ($tasks === false) {
+    $tasks = get_clickup_tasks_from_folder($api_key, $folder_id);
+    $ttl = function_exists('wg_cache_ttl') ? wg_cache_ttl('clickup_tasks', 180) : 180; // 3 minutes
+    if (function_exists('wg_cache_set')) {
+        wg_cache_set($cache_key, $tasks, $ttl);
+    }
+}
 
 // Extract all unique categories from tasks
 $all_categories = [];
