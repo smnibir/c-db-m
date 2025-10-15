@@ -117,12 +117,7 @@ function webgrowth_api_get_dashboard($request) {
         'first_name' => get_user_meta($user_id, 'first_name', true),
         'last_name' => get_user_meta($user_id, 'last_name', true),
         'company_name' => get_field('company_name', 'user_' . $user_id),
-        'company_logo' => get_field('company_logo', 'user_' . $user_id),
-        'profile_image' => get_field('profile_image', 'user_' . $user_id)
-    ];
-}
-
-// Get meeting notes
+        'company_logo' => get_field('c// Get meeting notes
 function webgrowth_api_get_meeting_notes($request) {
     $user_id = get_current_user_id();
     $doc_id = get_field('client_portal', 'user_' . $user_id);
@@ -133,15 +128,33 @@ function webgrowth_api_get_meeting_notes($request) {
         return new WP_Error('missing_config', 'Missing ClickUp configuration', ['status' => 400]);
     }
 
-    $response = wp_remote_get("https://api.clickup.com/api/v3/workspaces/{$workspace_id}/docs/{$doc_id}/pages", [
-        'headers' => ['Authorization' => $api_key],
-    ]);
+    // Use caching
+    $cache_key = ClickUp_Cache_Manager::get_user_cache_key('meeting_notes_api', $user_id);
+    $pages = ClickUp_Cache_Manager::get_or_fetch(
+        $cache_key,
+        function() use ($workspace_id, $doc_id, $api_key) {
+            $response = wp_remote_get("https://api.clickup.com/api/v3/workspaces/{$workspace_id}/docs/{$doc_id}/pages", [
+                'headers' => ['Authorization' => $api_key],
+                'timeout' => 20,
+            ]);
 
-    if (is_wp_error($response)) {
+            if (is_wp_error($response)) {
+                return $response;
+            }
+
+            return json_decode(wp_remote_retrieve_body($response), true);
+        },
+        ClickUp_Cache_Manager::CACHE_DURATION_MEDIUM
+    );
+
+    if (is_wp_error($pages)) {
         return new WP_Error('api_error', 'Error fetching ClickUp data', ['status' => 500]);
-    }
+    } ]);
 
-    $pages = json_decode(wp_remote_retrieve_body($response), true);
+    if (is_w    $meeting_notes_page = null;
+    $pages_array = isset($pages['pages']) ? $pages['pages'] : $pages;
+
+    foreach ($pages_array as $page) {ges = json_decode(wp_remote_retrieve_body($response), true);
     $meeting_notes_page = null;
 
     foreach ($pages as $page) {
@@ -152,12 +165,7 @@ function webgrowth_api_get_meeting_notes($request) {
     }
 
     return [
-        'content' => $meeting_notes_page ? $meeting_notes_page['content'] : '',
-        'formatted_content' => $meeting_notes_page ? webgrowth_parse_markdown($meeting_notes_page['content']) : ''
-    ];
-}
-
-// Get tasks
+        'content' => $meeting_notes_page ? $meeting_notes_page['content']// Get tasks
 function webgrowth_api_get_tasks($request) {
     $user_id = get_current_user_id();
     $api_key = get_option('clickup_api_key');
@@ -167,24 +175,47 @@ function webgrowth_api_get_tasks($request) {
         return new WP_Error('missing_config', 'Missing ClickUp configuration', ['status' => 400]);
     }
 
-    $all_tasks = [];
-    $list_ids = [];
+    // Use caching for tasks
+    $cache_key = ClickUp_Cache_Manager::get_user_cache_key('tasks_api', $user_id);
+    $all_tasks = ClickUp_Cache_Manager::get_or_fetch(
+        $cache_key,
+        function() use ($api_key, $folder_id) {
+            $all_tasks = [];
+            $list_ids = [];
 
-    // Get Lists in Folder
-    $res_lists = wp_remote_get("https://api.clickup.com/api/v2/folder/{$folder_id}/list", [
-        'headers' => ['Authorization' => $api_key]
-    ]);
+            // Get Lists in Folder
+            $res_lists = wp_remote_get("https://api.clickup.com/api/v2/folder/{$folder_id}/list", [
+                'headers' => ['Authorization' => $api_key],
+                'timeout' => 20,
+            ]);
 
-    $lists = json_decode(wp_remote_retrieve_body($res_lists), true)['lists'] ?? [];
+            if (is_wp_error($res_lists)) {
+                return [];
+            }
 
-    foreach ($lists as $list) {
-        $list_ids[] = $list['id'];
-    }
+            $lists = json_decode(wp_remote_retrieve_body($res_lists), true)['lists'] ?? [];
 
-    // Get tasks from each list
-    foreach ($list_ids as $list_id) {
-        $response = wp_remote_get("https://api.clickup.com/api/v2/list/{$list_id}/task?subtasks=true&include_closed=true", [
-            'headers' => ['Authorization' => $api_key]
+            foreach ($lists as $list) {
+                $list_ids[] = $list['id'];
+            }
+
+            // Get tasks from each list
+            foreach ($list_ids as $list_id) {
+                $response = wp_remote_get("https://api.clickup.com/api/v2/list/{$list_id}/task?subtasks=true&include_closed=true", [
+                    'headers' => ['Authorization' => $api_key],
+                    'timeout' => 20,
+                ]);
+
+                if (!is_wp_error($response)) {
+                    $tasks = json_decode(wp_remote_retrieve_body($response), true)['tasks'] ?? [];
+                    $all_tasks = array_merge($all_tasks, $tasks);
+                }
+            }
+
+            return $all_tasks;
+        },
+        ClickUp_Cache_Manager::CACHE_DURATION_SHORT // 5 minutes for tasks
+    );key]
         ]);
 
         $tasks = json_decode(wp_remote_retrieve_body($response), true)['tasks'] ?? [];
@@ -311,15 +342,7 @@ function webgrowth_api_get_brand_assets($request) {
         'color_palette' => get_field('color_palate', 'user_' . $user_id) ?: [],
         'typography' => get_field('typography', 'user_' . $user_id) ?: [],
         'download_assets' => get_field('download_assets', 'user_' . $user_id) ?: [],
-        'team_contacts' => get_field('team_contacts', 'user_' . $user_id) ?: [],
-        'drive_links' => [
-            'core' => get_field('core_drive_link', 'user_' . $user_id),
-            'assets' => get_field('asset_drive_link', 'user_' . $user_id)
-        ]
-    ];
-}
-
-// Get performance data
+        'team_c// Get performance data
 function webgrowth_api_get_performance($request) {
     $user_id = get_current_user_id();
     $doc_id = get_field('client_portal', 'user_' . $user_id);
@@ -330,11 +353,31 @@ function webgrowth_api_get_performance($request) {
         return new WP_Error('missing_config', 'Missing ClickUp configuration', ['status' => 400]);
     }
 
-    $response = wp_remote_get("https://api.clickup.com/api/v3/workspaces/{$workspace_id}/docs/{$doc_id}/pages", [
-        'headers' => ['Authorization' => $api_key],
-    ]);
+    // Use caching
+    $cache_key = ClickUp_Cache_Manager::get_user_cache_key('performance_api', $user_id);
+    $pages = ClickUp_Cache_Manager::get_or_fetch(
+        $cache_key,
+        function() use ($workspace_id, $doc_id, $api_key) {
+            $response = wp_remote_get("https://api.clickup.com/api/v3/workspaces/{$workspace_id}/docs/{$doc_id}/pages", [
+                'headers' => ['Authorization' => $api_key],
+                'timeout' => 20,
+            ]);
 
-    if (is_wp_error($response)) {
+            if (is_wp_error($response)) {
+                return $response;
+            }
+
+            return json_decode(wp_remote_retrieve_body($response), true);
+        },
+        ClickUp_Cache_Manager::CACHE_DURATION_MEDIUM
+    );
+
+    if (is_wp_error($pages)) {
+        return new WP_Error('api_error', 'Error fetching ClickUp data', ['status' => 500]);
+    }t("https://api.clicku    $performance_page = null;
+    $pages_array = isset($pages['pages']) ? $pages['pages'] : $pages;
+
+    foreach ($pages_array as $page) {    if (is_wp_error($response)) {
         return new WP_Error('api_error', 'Error fetching ClickUp data', ['status' => 500]);
     }
 

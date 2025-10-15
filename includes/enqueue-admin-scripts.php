@@ -28,5 +28,28 @@ add_action('admin_enqueue_scripts', function ($hook) {
 add_action('wp_enqueue_scripts', function() {
     if (is_page() && has_shortcode(get_post()->post_content, 'client_dashboard')) {
         wp_enqueue_script('stripe', 'https://js.stripe.com/v3/', [], null, true);
+        
+        // Enqueue lazy load script
+        wp_enqueue_script(
+            'clickup-lazy-load',
+            plugin_dir_url(__DIR__) . 'assets/lazy-load.js',
+            ['jquery'],
+            filemtime(plugin_dir_path(__DIR__) . 'assets/lazy-load.js'),
+            true
+        );
+        
+        // Localize script with AJAX URL and nonce
+        wp_localize_script('clickup-lazy-load', 'clickupLazyLoad', [
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('clickup_lazy_load_nonce')
+        ]);
+        
+        // Enqueue loading indicator styles
+        wp_enqueue_style(
+            'clickup-loading-indicator',
+            plugin_dir_url(__DIR__) . 'assets/loading-indicator.css',
+            [],
+            filemtime(plugin_dir_path(__DIR__) . 'assets/loading-indicator.css')
+        );
     }
 });
