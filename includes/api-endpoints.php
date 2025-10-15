@@ -4,60 +4,60 @@
 // Register REST API routes
 add_action('rest_api_init', function () {
     // Authentication endpoint
-    register_rest_route('webgrowth/v1', '/login', [
+    register_rest_route('webgrowth/v1', '/login', array(
         'methods' => 'POST',
         'callback' => 'webgrowth_api_login',
         'permission_callback' => '__return_true'
-    ]);
+    ));
 
     // Dashboard data endpoint
-    register_rest_route('webgrowth/v1', '/dashboard', [
+    register_rest_route('webgrowth/v1', '/dashboard', array(
         'methods' => 'GET',
         'callback' => 'webgrowth_api_get_dashboard',
         'permission_callback' => 'webgrowth_api_permissions_check'
-    ]);
+    ));
 
     // Meeting notes endpoint
-    register_rest_route('webgrowth/v1', '/meeting-notes', [
+    register_rest_route('webgrowth/v1', '/meeting-notes', array(
         'methods' => 'GET',
         'callback' => 'webgrowth_api_get_meeting_notes',
         'permission_callback' => 'webgrowth_api_permissions_check'
-    ]);
+    ));
 
     // Tasks endpoint
-    register_rest_route('webgrowth/v1', '/tasks', [
+    register_rest_route('webgrowth/v1', '/tasks', array(
         'methods' => 'GET',
         'callback' => 'webgrowth_api_get_tasks',
         'permission_callback' => 'webgrowth_api_permissions_check'
-    ]);
+    ));
 
     // Billing endpoint
-    register_rest_route('webgrowth/v1', '/billing', [
+    register_rest_route('webgrowth/v1', '/billing', array(
         'methods' => 'GET',
         'callback' => 'webgrowth_api_get_billing',
         'permission_callback' => 'webgrowth_api_permissions_check'
-    ]);
+    ));
 
     // Brand assets endpoint
-    register_rest_route('webgrowth/v1', '/brand-assets', [
+    register_rest_route('webgrowth/v1', '/brand-assets', array(
         'methods' => 'GET',
         'callback' => 'webgrowth_api_get_brand_assets',
         'permission_callback' => 'webgrowth_api_permissions_check'
-    ]);
+    ));
 
     // Performance summary endpoint
-    register_rest_route('webgrowth/v1', '/performance', [
+    register_rest_route('webgrowth/v1', '/performance', array(
         'methods' => 'GET',
         'callback' => 'webgrowth_api_get_performance',
         'permission_callback' => 'webgrowth_api_permissions_check'
-    ]);
+    ));
 
     // User profile endpoint
-    register_rest_route('webgrowth/v1', '/profile', [
+    register_rest_route('webgrowth/v1', '/profile', array(
         'methods' => 'GET',
         'callback' => 'webgrowth_api_get_profile',
         'permission_callback' => 'webgrowth_api_permissions_check'
-    ]);
+    ));
 });
 
 // Authentication function
@@ -74,18 +74,18 @@ function webgrowth_api_login($request) {
     // Generate JWT token (install JWT Authentication plugin or implement custom)
     $token = webgrowth_generate_jwt_token($user->ID);
 
-    return [
+    return array(
         'success' => true,
         'token' => $token,
-        'user' => [
+        'user' => array(
             'id' => $user->ID,
             'email' => $user->user_email,
             'first_name' => get_user_meta($user->ID, 'first_name', true),
             'last_name' => get_user_meta($user->ID, 'last_name', true),
             'company_name' => get_field('company_name', 'user_' . $user->ID),
             'profile_image' => get_field('profile_image', 'user_' . $user->ID)
-        ]
-    ];
+        )
+    );
 }
 
 // Permission check
@@ -112,14 +112,14 @@ function webgrowth_api_permissions_check($request) {
 function webgrowth_api_get_dashboard($request) {
     $user_id = get_current_user_id();
     
-    return [
+    return array(
         'welcome_message' => get_field('welcome', 'user_' . $user_id),
         'first_name' => get_user_meta($user_id, 'first_name', true),
         'last_name' => get_user_meta($user_id, 'last_name', true),
         'company_name' => get_field('company_name', 'user_' . $user_id),
         'company_logo' => get_field('company_logo', 'user_' . $user_id),
         'profile_image' => get_field('profile_image', 'user_' . $user_id)
-    ];
+    );
 }
 
 // Get meeting notes
@@ -151,10 +151,10 @@ function webgrowth_api_get_meeting_notes($request) {
         }
     }
 
-    return [
+    return array(
         'content' => $meeting_notes_page ? $meeting_notes_page['content'] : '',
         'formatted_content' => $meeting_notes_page ? webgrowth_parse_markdown($meeting_notes_page['content']) : ''
-    ];
+    );
 }
 
 // Get tasks
@@ -181,7 +181,8 @@ function webgrowth_api_get_tasks($request) {
             'headers' => ['Authorization' => $api_key]
         ]);
 
-        $lists = json_decode(wp_remote_retrieve_body($res_lists), true)['lists'] ?? [];
+        $lists_body = json_decode(wp_remote_retrieve_body($res_lists), true);
+        $lists = isset($lists_body['lists']) ? $lists_body['lists'] : array();
 
         foreach ($lists as $list) {
             $list_ids[] = $list['id'];
@@ -193,7 +194,8 @@ function webgrowth_api_get_tasks($request) {
                 'headers' => ['Authorization' => $api_key]
             ]);
 
-            $tasks = json_decode(wp_remote_retrieve_body($response), true)['tasks'] ?? [];
+            $tasks_body = json_decode(wp_remote_retrieve_body($response), true);
+            $tasks = isset($tasks_body['tasks']) ? $tasks_body['tasks'] : array();
             $all_tasks = array_merge($all_tasks, $tasks);
         }
 
@@ -211,36 +213,36 @@ function webgrowth_api_get_tasks($request) {
         
         foreach ($task['custom_fields'] as $field) {
             if ($field['name'] === 'Category' && isset($field['value'])) {
-                $options = $field['type_config']['options'] ?? [];
+                $options = isset($field['type_config']['options']) ? $field['type_config']['options'] : array();
                 if (isset($options[$field['value']])) {
-                    $category = $options[$field['value']]['name'] ?? '';
-                    $category_color = $options[$field['value']]['color'] ?? '#000000';
+                    $category = isset($options[$field['value']]['name']) ? $options[$field['value']]['name'] : '';
+                    $category_color = isset($options[$field['value']]['color']) ? $options[$field['value']]['color'] : '#000000';
                 }
             }
         }
 
-        return [
+        return array(
             'id' => $task['id'],
             'name' => $task['name'],
-            'description' => $task['description'] ?? '',
+            'description' => isset($task['description']) ? $task['description'] : '',
             'status' => $status,
-            'priority' => $task['priority']['priority'] ?? '',
-            'priority_color' => $task['priority']['color'] ?? '#000000',
+            'priority' => isset($task['priority']['priority']) ? $task['priority']['priority'] : '',
+            'priority_color' => isset($task['priority']['color']) ? $task['priority']['color'] : '#000000',
             'category' => $category,
             'category_color' => $category_color,
-            'assignees' => array_map(fn($a) => $a['username'], $task['assignees'] ?? []),
+            'assignees' => array_map(function ($a) { return $a['username']; }, $task['assignees'] ?? []),
             'date_created' => date('Y-m-d', intval($task['date_created'] / 1000)),
             'due_date' => isset($task['due_date']) ? date('Y-m-d', intval($task['due_date'] / 1000)) : null
-        ];
+        );
     }, $all_tasks);
 
-    return [
+    return array(
         'total' => count($formatted_tasks),
-        'completed' => count(array_filter($formatted_tasks, fn($t) => $t['status'] === 'complete')),
-        'in_progress' => count(array_filter($formatted_tasks, fn($t) => $t['status'] === 'in progress')),
-        'upcoming' => count(array_filter($formatted_tasks, fn($t) => !in_array($t['status'], ['complete', 'in progress']))),
+        'completed' => count(array_filter($formatted_tasks, function ($t) { return $t['status'] === 'complete'; })),
+        'in_progress' => count(array_filter($formatted_tasks, function ($t) { return $t['status'] === 'in progress'; })),
+        'upcoming' => count(array_filter($formatted_tasks, function ($t) { return !in_array($t['status'], ['complete', 'in progress']); })),
         'tasks' => $formatted_tasks
-    ];
+    );
 }
 
 // Get billing information
@@ -285,50 +287,50 @@ function webgrowth_api_get_billing($request) {
     }
 
     // Get recent orders
-    $orders = wc_get_orders([
+    $orders = wc_get_orders(array(
         'customer' => $user_id,
         'limit' => 10,
         'orderby' => 'date',
         'order' => 'DESC',
         'return' => 'objects',
-    ]);
+    ));
 
     $formatted_orders = array_map(function($order) {
-        return [
+        return array(
             'id' => $order->get_id(),
             'number' => $order->get_order_number(),
             'date' => $order->get_date_created()->date('Y-m-d'),
             'status' => $order->get_status(),
             'total' => $order->get_total(),
             'payment_method' => $order->get_payment_method_title()
-        ];
+        );
     }, $orders);
 
-    return [
+    return array(
         'subscriptions' => $subscriptions,
         'orders' => $formatted_orders,
         'current_month_total' => webgrowth_calculate_monthly_total($user_id),
         'payment_methods' => webgrowth_get_payment_methods($user_id)
-    ];
+    );
 }
 
 // Get brand assets
 function webgrowth_api_get_brand_assets($request) {
     $user_id = get_current_user_id();
     
-    return [
+    return array(
         'company_logo' => get_field('company_logo', 'user_' . $user_id),
         'company_name' => get_field('company_name', 'user_' . $user_id),
         'company_sub_title' => get_field('company_sub_title', 'user_' . $user_id),
-        'color_palette' => get_field('color_palate', 'user_' . $user_id) ?: [],
-        'typography' => get_field('typography', 'user_' . $user_id) ?: [],
-        'download_assets' => get_field('download_assets', 'user_' . $user_id) ?: [],
-        'team_contacts' => get_field('team_contacts', 'user_' . $user_id) ?: [],
-        'drive_links' => [
+        'color_palette' => get_field('color_palate', 'user_' . $user_id) ?: array(),
+        'typography' => get_field('typography', 'user_' . $user_id) ?: array(),
+        'download_assets' => get_field('download_assets', 'user_' . $user_id) ?: array(),
+        'team_contacts' => get_field('team_contacts', 'user_' . $user_id) ?: array(),
+        'drive_links' => array(
             'core' => get_field('core_drive_link', 'user_' . $user_id),
             'assets' => get_field('asset_drive_link', 'user_' . $user_id)
-        ]
-    ];
+        )
+    );
 }
 
 // Get performance data
@@ -360,10 +362,10 @@ function webgrowth_api_get_performance($request) {
         }
     }
 
-    return [
+    return array(
         'content' => $performance_page ? $performance_page['content'] : '',
         'formatted_content' => $performance_page ? webgrowth_parse_markdown($performance_page['content']) : ''
-    ];
+    );
 }
 
 // Get user profile
@@ -371,7 +373,7 @@ function webgrowth_api_get_profile($request) {
     $user_id = get_current_user_id();
     $user = get_userdata($user_id);
     
-    return [
+    return array(
         'id' => $user_id,
         'email' => $user->user_email,
         'first_name' => get_field('first_name', 'user_' . $user_id) ?: $user->first_name,
@@ -381,7 +383,7 @@ function webgrowth_api_get_profile($request) {
         'clickup_space' => get_field('clickup_space', 'user_' . $user_id),
         'clickup_folder' => get_field('clickup_folder', 'user_' . $user_id),
         'client_portal' => get_field('client_portal', 'user_' . $user_id)
-    ];
+    );
 }
 
 // Helper functions
@@ -430,12 +432,12 @@ function webgrowth_parse_markdown($content) {
 }
 
 function webgrowth_calculate_monthly_total($user_id) {
-    $orders = wc_get_orders([
+    $orders = wc_get_orders(array(
         'customer' => $user_id,
         'date_created' => '>' . date('Y-m-01'),
-        'status' => ['completed', 'processing'],
+        'status' => array('completed', 'processing'),
         'return' => 'objects',
-    ]);
+    ));
     
     $total = 0;
     foreach ($orders as $order) {

@@ -10,22 +10,15 @@ if (!defined('ABSPATH')) exit;
 
 // Lightweight caching helpers (transients with sane defaults)
 if (!function_exists('wg_cache_get')) {
-    /**
-     * Retrieve a cached value by transient key.
-     */
-    function wg_cache_get(string $key)
-    {
+    /** Retrieve a cached value by transient key. */
+    function wg_cache_get($key) {
         return get_transient($key);
     }
 }
 
 if (!function_exists('wg_cache_set')) {
-    /**
-     * Store a value in the transient cache with a configurable TTL.
-     */
-    function wg_cache_set(string $key, $value, int $ttlSeconds)
-    {
-        // Ensure non-negative TTL
+    /** Store a value in the transient cache with a configurable TTL. */
+    function wg_cache_set($key, $value, $ttlSeconds) {
         $ttl = max(0, (int) $ttlSeconds);
         set_transient($key, $value, $ttl);
         return $value;
@@ -33,33 +26,24 @@ if (!function_exists('wg_cache_set')) {
 }
 
 if (!function_exists('wg_cache_delete')) {
-    /**
-     * Delete a cached transient by key.
-     */
-    function wg_cache_delete(string $key)
-    {
+    /** Delete a cached transient by key. */
+    function wg_cache_delete($key) {
         delete_transient($key);
     }
 }
 
 if (!function_exists('wg_cache_ttl')) {
-    /**
-     * Allow filtering TTLs per cache type with sensible defaults.
-     * Example filters: 'wg_cache_ttl_clickup_pages', 'wg_cache_ttl_clickup_tasks', 'wg_cache_ttl_whatconverts_leads'
-     */
-    function wg_cache_ttl(string $type, int $defaultSeconds)
-    {
+    /** Allow filtering TTLs per cache type with sensible defaults. */
+    function wg_cache_ttl($type, $defaultSeconds) {
         return (int) apply_filters('wg_cache_ttl_' . $type, $defaultSeconds);
     }
 }
 
 if (!function_exists('wg_user_cache_key')) {
-    /**
-     * Build a per-user cache key with stable hashing of parts.
-     */
-    function wg_user_cache_key(string $prefix, array $parts = [])
-    {
+    /** Build a per-user cache key with stable hashing of parts. */
+    function wg_user_cache_key($prefix, $parts = array()) {
         $userId = get_current_user_id();
+        $parts = is_array($parts) ? $parts : array($parts);
         $saltParts = array_map('strval', $parts);
         array_unshift($saltParts, (string) $userId);
         $hash = md5(implode('|', $saltParts));

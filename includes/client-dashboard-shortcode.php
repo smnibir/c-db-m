@@ -140,7 +140,8 @@ function render_clickup_client_dashboard() {
         $b_idx = isset($b['name']) ? array_search($b['name'], $allowed_titles, true) : PHP_INT_MAX;
         $a_idx = ($a_idx === false) ? PHP_INT_MAX : $a_idx;
         $b_idx = ($b_idx === false) ? PHP_INT_MAX : $b_idx;
-        return $a_idx <=> $b_idx;
+        if ($a_idx === $b_idx) return 0;
+        return ($a_idx < $b_idx) ? -1 : 1;
     });
 
     // Add manual tabs if not in API (except Support Form which has a specific template)

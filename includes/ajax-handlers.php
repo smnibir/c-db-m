@@ -670,3 +670,120 @@ function fetch_lead_filters() {
     
     wp_send_json_success($filter_data);
 }
+
+// === Lazy-load dashboard tab content ===
+add_action('wp_ajax_wg_load_dashboard_tab', 'wg_load_dashboard_tab');
+function wg_load_dashboard_tab() {
+    if (!is_user_logged_in()) {
+        wp_send_json_error('Unauthorized', 401);
+    }
+
+    $slug = isset($_POST['slug']) ? sanitize_title($_POST['slug']) : '';
+    if ($slug === '') {
+        wp_send_json_error('Missing slug', 400);
+    }
+
+    $user_id      = get_current_user_id();
+    $doc_id       = function_exists('get_field') ? get_field('client_portal', 'user_' . $user_id) : get_user_meta($user_id, 'client_portal', true);
+    $workspace_id = get_option('clickup_workspace_id');
+    $api_key      = get_option('clickup_api_key');
+
+    if (!$doc_id || !$workspace_id || !$api_key) {
+        wp_send_json_error('Missing configuration', 400);
+    }
+
+    $allowed_titles = [
+        'Home',
+        'Meeting Notes',
+        'Task List',
+        'Performance Summary',
+        'Analytics Dashboard',
+        'Lead',
+        'Campaign Strategy',
+        //'Billing & Payments',
+        'Brand Assets & Info',
+        'Support Form',
+    ];
+
+    // Map title to template
+    $template_map = [
+        'Home'               => 'welcome.php',
+        'Meeting Notes'      => 'meeting-notes.php',
+        'Task List'          => 'task-list.php',
+        'Performance Summary'=> 'performance-summary.php',
+        'Analytics Dashboard'=> 'iframe.php',
+        'Lead'               => 'lead.php',
+        'Campaign Strategy'  => 'campaign-strategy.php',
+        'Billing & Payments' => 'bill.php',
+        'Brand Assets & Info'=> 'brand.php',
+        'Support Form'       => 'iframe-support.php',
+    ];
+
+    // Find title by slug
+    $title = '';
+    foreach ($allowed_titles as $t) {
+        if (sanitize_title($t) === $slug) { $title = $t; break; }
+    }
+    if ($title === '') {
+        wp_send_json_error('Invalid tab', 400);
+    }
+
+    // Fetch pages (cached)
+    $cache_key = function_exists('wg_user_cache_key')
+        ? wg_user_cache_key('wg_clickup_pages', [$workspace_id, $doc_id])
+        : 'wg_clickup_pages_' . md5($workspace_id . '|' . $doc_id . '|' . $user_id);
+    $pages = function_exists('wg_cache_get') ? wg_cache_get($cache_key) : false;
+    if ($pages === false) {
+        $endpoint = "https://api.clickup.com/api/v3/workspaces/{$workspace_id}/docs/{$doc_id}/pages";
+        $response = wp_remote_get($endpoint, [
+            'headers' => [ 'Authorization' => $api_key ],
+            'timeout' => 20,
+        ]);
+        if (is_wp_error($response)) {
+            wp_send_json_error('Error fetching pages', 500);
+        }
+        $pages = json_decode(wp_remote_retrieve_body($response), true);
+        $ttl = function_exists('wg_cache_ttl') ? wg_cache_ttl('clickup_pages', 300) : 300;
+        if (function_exists('wg_cache_set')) {
+            wg_cache_set($cache_key, $pages, $ttl);
+        }
+    }
+    if (is_array($pages) && isset($pages['pages']) && is_array($pages['pages'])) {
+        $pages = $pages['pages'];
+    }
+    if (!is_array($pages)) { $pages = []; }
+
+    // Match page by name
+    $page = null;
+    foreach ($pages as $p) {
+        if (is_array($p) && isset($p['name']) && $p['name'] === $title) { $page = $p; break; }
+    }
+    $content = $page && isset($page['content']) ? $page['content'] : '';
+
+    // For iframe templates, extract URL
+    if (in_array($template_map[$title], ['iframe.php','iframe-support.php'], true)) {
+        $iframe_url = '';
+        if (is_string($content) && $content !== '') {
+            if (preg_match('/https?:\/\/[^\s"]+/', $content, $m)) { $iframe_url = $m[0]; }
+        }
+        $iframe_url = esc_url($iframe_url);
+    }
+
+    // Optionally support Parsedown
+    $Parsedown = null;
+    $parsedown_path = plugin_dir_path(__DIR__) . 'includes/parsedown.php';
+    if (!class_exists('Parsedown') && file_exists($parsedown_path)) {
+        require_once $parsedown_path;
+    }
+    if (class_exists('Parsedown')) { $Parsedown = new Parsedown(); }
+
+    $path = plugin_dir_path(__DIR__) . 'templates/' . ($template_map[$title] ?? '');
+    if (!$path || !file_exists($path)) {
+        wp_send_json_error('Template not found', 404);
+    }
+
+    ob_start();
+    include $path; // templates may use $content, $Parsedown, $iframe_url
+    $html = ob_get_clean();
+    wp_send_json_success(['html' => $html]);
+}

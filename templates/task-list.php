@@ -82,13 +82,13 @@ foreach ($tasks as $task) {
 }
 
 // Categorize tasks by status (make filtering case-insensitive)
-$completed_tasks = array_filter($tasks, fn($t) => isset($t['status']['status']) && strtolower($t['status']['status']) === 'complete');
-$in_progress_tasks = array_filter($tasks, fn($t) => isset($t['status']['status']) && strtolower($t['status']['status']) === 'in progress');
-$upcoming_tasks = array_filter($tasks, fn($t) => 
-    isset($t['status']['status']) &&
-    strtolower($t['status']['status']) !== 'complete' && 
-    strtolower($t['status']['status']) !== 'in progress'
-);
+$completed_tasks = array_filter($tasks, function ($t) { return isset($t['status']['status']) && strtolower($t['status']['status']) === 'complete'; });
+$in_progress_tasks = array_filter($tasks, function ($t) { return isset($t['status']['status']) && strtolower($t['status']['status']) === 'in progress'; });
+$upcoming_tasks = array_filter($tasks, function ($t) {
+    return isset($t['status']['status']) &&
+        strtolower($t['status']['status']) !== 'complete' &&
+        strtolower($t['status']['status']) !== 'in progress';
+});
 
 $total_tasks = count($tasks);
 $completed = count($completed_tasks);
